@@ -1,0 +1,149 @@
+#!ipxe
+set stubversion 2
+set bootprogram TwoPintPXE
+set defaulthttp_port 8050
+set esc:hex 1b ||
+set cls ${esc:string}[2J ||
+echo ${cls} ||
+colour --rgb 0xFFFFFF 7 || 
+colour --basic 0 --rgb 0x000000 0 ||
+colour --basic 0 0 ||
+cpair --foreground 0 0 ||
+
+#Example of how to generate advanced graphs
+#We should move up console detection earlier and then show cooler ASCII
+#set 4s:hex 20:20:20:20
+#echo ${4s:string}
+
+echo ...............................................................................
+echo ...............................................................................
+echo ...............................................................................
+cpair --foreground 4 0 ||
+echo .2222222222222....PPPPPPPPPPPPPPPP.....iii..........................tt.........
+echo 2:::::::::::::22..P:::::::::::::::P...i:::i.......................ttt:t........
+echo 2:::::222222::::2 P:::::PPPPPP:::::P...iii........................t:::t........
+echo 222222.....2::::2 PP::::P.....P:::::P.............................t:::t........
+echo ...........2::::2...P:::P.....P:::::Piiiiiinnnn..nnnnnn....ttttttt:::ttttttt...
+echo ...........2::::2...P:::P.....P:::::Pi::::in:::nn::::::nn..t:::::::::::::::t...
+echo ........2222:::2....P:::PPPPPP:::::P..i:::in::::::::::::nn.t:::::::::::::::t...
+echo ....2222:::::22.....P::::::::::::PP...i:::inn:::::::::::::ntttttt:::::tttttt...
+echo ..22::::::222.......P:::PPPPPPPPP.....i:::i..n::::nnnn::::n......t:::t.........
+echo .2::::22222.........P:::P.............i:::i..n:::n....n:::n......t:::t.........
+echo 2::::2..............P:::P.............i:::i..n:::n....n:::n......t:::t.........
+echo 2::::2..............P:::P.............i:::i..n:::n....n:::n......t:::t....ttttt
+echo 2::::2.......22222PP:::::PP..........i:::::i.n:::n....n:::n......t::::tttt::::t
+echo 2:::::2222222::::2P:::::::P..........i:::::i.n:::n....n:::n......tt:::::::::::t
+echo 2::::::::::::::::2P:::::::P..........i:::::i.n:::n....n:::n........tt:::::::tt
+echo 222222222222222222PPPPPPPPP..........iiiiiii.nnnnn....nnnnn..........ttttttt...
+cpair --foreground 0 0
+echo ...............................................................................
+echo ...............................................................................
+echo -n ...........................
+cpair --foreground 7 0 ||
+echo -n http://2PintSoftware.com 
+cpair --foreground 0 0 ||
+echo ............................
+echo ...............................................................................
+echo ...............................................................................
+cpair 0 ||
+cpair 1 ||
+
+#Graphs & debug
+prompt --key s --timeout 500 && set debug true || set debug false
+prompt --key c --timeout 500 && shell || 
+console --x 1024 --y 768 && set consoleok true || set consoleok false
+iseq ${platform} efi && set consoleok false ||
+
+console
+set dhcpretries:int32 0
+set chainretries:int32 0
+set timeout:int32 10
+set chainattempt:int32 0
+
+#get CPUID
+cpuid --ext 29 && set arch x64 || set arch x86
+
+goto TRY
+
+:retry
+iseq debug true && pause ||
+set timer:int32 0
+inc dhcpretries
+set component too many retries
+iseq ${dhcpretries} 100 && goto fail ||
+
+echo -n Waiting ${timeout} seconds (${dhcpretries}/100)
+:progressbar
+inc timer
+echo -n .
+sleep 1
+iseq ${timer} ${timeout} && echo Done Waiting! || goto progressbar
+
+:TRY
+set component ifconf
+echo Contacting Server...
+
+ifconf || goto retry
+echo Server: ${next-server}
+isset ${next-server} || goto retry
+isset ${250} && echo Server is using port: ${250} || echo Trying with default port ${defaulthttp_port}
+isset ${250} && set defaulthttp_port ${250} ||
+
+iseq ${consoleok} true || goto noconsole
+console --picture http://${next-server}:${defaulthttp_port}/DL?file=/Boot/2PintLogo.png && goto noconsole ||
+console --picture tftp://${next-server}/boot/2PintLogo.png ||
+:noconsole
+
+set ok_uuid ${uuid}
+
+params --name bootreq
+param --params bootreq stub ${stubversion}
+param --params bootreq arch ${arch}
+param --params bootreq ba ${buildarch}
+param --params bootreq platform ${platform}
+param --params bootreq macinfo ${${nic}/mac}
+param --params bootreq uuid ${ok_uuid:uristring}
+param --params bootreq asset ${asset:uristring}
+param --params bootreq serial ${serial:uristring}
+param --params bootreq make ${manufacturer:uristring}
+param --params bootreq model ${product:uristring}
+param --params bootreq NICvendor ${vendor_id}
+param --params bootreq NICdevice ${device_id}
+param --params bootreq ipinfo ${ip}
+param --params bootreq nm ${1}
+param --params bootreq gw ${3}
+param --params bootreq bootserverip ${next-server}
+param --params bootreq dhcpserverip ${54}
+param --params bootreq biosvendor ${smbios/0.4.0}
+param --params bootreq biosrev ${smbios/0.5.0}
+param --params bootreq biosdate ${smbios/0.8.0}
+param --params bootreq bootmajor ${smbios/0.20.1}
+param --params bootreq bootminor ${smbios/0.21.1}
+param --params bootreq enclosure ${smbios/3.5.1}
+
+set bootinfourl http://${next-server}:${defaulthttp_port}/${bootprogram}##params=bootreq ||
+
+set component chain
+iseq ${250} TFTP && goto tftpchain || goto httpchain
+
+:tftpchain
+chain tftp://${next-server}${252} && exit || goto retry
+
+:httpchain
+chain ${bootinfourl} && exit || goto retry
+
+:fail
+echo Component: ${component} failed. It sucks. We apologize on its behalf.
+echo
+echo Email support@2pintSoftware.com NOW!!!!
+echo
+echo Some random expert data that might be handy:
+echo Failing component: ${component}
+echo Retries: ${retries}
+ifstat ||
+profstat ||
+prompt --key 0x02 Press Ctrl-B for the iPXE command line... && shell ||
+
+
+:niceexit
+exit
