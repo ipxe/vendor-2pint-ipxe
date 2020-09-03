@@ -1,0 +1,288 @@
+#!ipxe
+prompt --key c --timeout 500 && set debug true || set debug false
+echo
+iseq ${debug} true && echo Enabling debug mode, type 'exit' and press enter to continue for each step... || 
+
+
+set stubversion 27
+set bootprogram Boot
+set esc:hex 1b ||
+set cls ${esc:string}[2J ||
+
+iseq ${debug} false && goto nodebug ||
+iseq ${debug} true && shell ||
+
+
+:nodebug
+iseq ${debug} true && echo Clearing the screen ||
+iseq ${debug} true && shell ||
+
+echo ${cls} ||
+colour --rgb 0xFFFFFF 7 || 
+colour --basic 0 --rgb 0x000000 0 ||
+colour --basic 0 0 ||
+cpair --foreground 7 0 ||
+cpair --foreground 0 0 ||
+cpair 0 ||
+cpair 1 ||
+
+iseq ${debug} true && echo Setting background to test console ||
+iseq ${debug} true && shell ||
+console --x 1024 --y 768 --picture 2PintLogo.png && set consoleok true || set consoleok false
+
+echo ${cls}
+
+set dhcpretries:int32 0
+set chainretries:int32 0
+set timeout:int32 10
+set chainattempt:int32 0
+
+#get CPUID
+iseq ${debug} true && echo Checking CPUid ||
+iseq ${debug} true && shell ||
+cpuid --ext 29 && set arch x64 || set arch x86
+
+goto TRY
+
+:retry
+iseq ${debug} true && echo Retry section ||
+set timer:int32 0
+inc dhcpretries
+set component too many retries
+iseq ${dhcpretries} 100 && goto fail ||
+
+echo -n Waiting ${timeout} seconds (${dhcpretries}/100) || goto fail
+:progressbar
+inc timer
+echo -n .
+sleep 1
+iseq ${timer} ${timeout} && echo Done Waiting! || goto progressbar
+
+:TRY
+set component ifconf
+
+iseq ${debug} true && echo Contacting 2PXE Server Infrastructure... ||
+
+
+iseq ${debug} true && echo Get an IP address. ||
+ifconf && set ifconffailed false || set ifconffailed true
+
+iseq ${ifconffailed} true && Echo Failed to get an IP Address || goto addressok
+goto retry
+
+:addressok
+iseq ${debug} true && echo Using the following IP information: ||
+iseq ${debug} true && echo IP Info: ${ip}/${netmask} ||
+iseq ${debug} true && echo GW Address: ${gateway} ||
+iseq ${debug} true && echo DNS: ${dns} ||
+iseq ${debug} true && echo Domain: ${domain} ||
+iseq ${debug} true && echo Using URL of ${175} for configuration ||
+
+# isset ${netX/syslog} && set syslog ${netX/syslog:ipv4} || echo Not using DHCP Syslog Server
+# isset ${proxydhcp/syslog} && set syslog ${proxydhcp/syslog:ipv4} || echo Not using Proxy DHCP Syslog Server
+iseq ${debug} true && echo PXE Server: ${next-server} SysLog: ${syslog:ipv4} ||
+
+iseq ${debug} true && echo ||
+iseq ${debug} true && echo Checking that 175 option is set, if not retrying. ||
+iseq ${debug} true && shell ||
+
+#sleep 1
+isset ${175} || goto retry
+set bootroot ${175} ||
+
+iseq ${debug} true && echo Using URL of ${175} for configuration ||
+
+set bootbackground ${bootroot}2PXE/File/Boot%255C2PintLogo.png
+
+iseq ${debug} true && echo Setting background from: ${bootroot}2PXE/File/Boot%255C2PintLogo.png ||
+iseq ${debug} true && shell ||
+
+iseq ${consoleok} true || goto noconsole
+console --picture ${bootroot}2PXE/File/Boot%255C2PintLogo.png --keep && goto consoleok || 
+
+#Transfer something so we get some network stats
+:noconsole
+
+initrd --name 2PintLogo.png ${bootroot}2PXE/File/Boot%255C2PintLogo.png 2PintLogo.png || 
+iseq ${debug} true && shell ||
+
+#imgfree 2PintLogo.png ||
+
+:consoleok
+:errcheck
+set lasterr ${errno}
+iseq ${lasterr} 0x216e48f && goto certerror ||
+iseq ${lasterr} 0x216ea8f && goto certerror ||
+iseq ${lasterr} 0x216eb8f && goto certerror ||
+iseq ${lasterr} 0x3c00e1 && goto certerror ||
+iseq ${lasterr} 0x410de3 && goto certerror ||
+
+
+
+iseq ${debug} true && echo -n Gateway Information: ||
+iseq ${debug} true && nstat || 
+
+#sleep 1
+
+params --name bootreq
+#goto inventory
+#echo Inventory Completed!
+:inventorycomplete
+
+iseq ${debug} true && echo stubversion ${stubversion} ||
+param --params bootreq stub ${stubversion} 
+iseq ${debug} true && echo arch ${arch} ||
+param --params bootreq arch ${arch}
+iseq ${debug} true && echo buildarch ${buildarch} ||
+param --params bootreq ba ${buildarch}
+iseq ${debug} true && echo platform ${platform} ||
+param --params bootreq platform ${platform}
+iseq ${debug} true && echo mac ${${nic}/mac} ||
+param --params bootreq mac ${${nic}/mac}
+iseq ${debug} true && echo uuid ${uuid:hexraw} ||
+param --params bootreq uuid ${uuid:hexraw}
+iseq ${debug} true && echo asset ${asset:uristring} ||
+param --params bootreq asset ${asset:uristring}
+iseq ${debug} true && echo serial ${serial:uristring} ||
+param --params bootreq serial ${serial:uristring}
+iseq ${debug} true && echo manufacturer ${manufacturer:uristring} ||
+param --params bootreq make ${manufacturer:uristring}
+iseq ${debug} true && echo model ${product:uristring} ||
+param --params bootreq model ${product:uristring}
+iseq ${debug} true && echo NICvendor ${pci/${net0/busloc}.0.2} ||
+param --params bootreq NICvendor ${pci/${net0/busloc}.0.2}
+iseq ${debug} true && echo NICdevice ${pci/${net0/busloc}.2.2} ||
+param --params bootreq NICdevice ${pci/${net0/busloc}.2.2}
+iseq ${debug} true && echo chip ${chip} ||
+param --params bootreq NICchip ${chip}
+iseq ${debug} true && echo ip ${ip} ||
+param --params bootreq ipinfo ${ip}
+iseq ${debug} true && echo nm ${1} ||
+param --params bootreq nm ${1}
+iseq ${debug} true && echo gw ${3} ||
+param --params bootreq gw ${3}
+iseq ${debug} true && echo bootserverip ${next-server} ||
+param --params bootreq bootserverip ${next-server}
+iseq ${debug} true && echo ${54} ||
+param --params bootreq dhcpserverip ${54}
+iseq ${debug} true && echo biosvendor ${smbios/0.4.0} ||
+param --params bootreq biosvendor ${smbios/0.4.0}
+iseq ${debug} true && echo biosrev ${smbios/0.5.0} ||
+param --params bootreq biosrev ${smbios/0.5.0}
+iseq ${debug} true && echo biosdate ${smbios/0.8.0} ||
+param --params bootreq biosdate ${smbios/0.8.0}
+iseq ${debug} true && echo bootmajor ${smbios/0.20.1} ||
+param --params bootreq bootmajor ${smbios/0.20.1}
+iseq ${debug} true && echo bootminor ${smbios/0.21.1} ||
+param --params bootreq bootminor ${smbios/0.21.1}
+iseq ${debug} true && echo enclosure ${smbios/3.5.1} ||
+param --params bootreq enclosure ${smbios/3.5.1}
+
+set bootinfourl ${bootroot}2PXE/${bootprogram}##params=bootreq ||
+
+set lasturl ${bootinfourl}
+iseq ${debug} true && echo Calling URL ${bootinfourl} ||
+iseq ${debug} true && shell ||
+chain -ar ${bootinfourl} && reboot ||
+
+shell
+
+
+:fail
+console ||
+echo Component: ${component} failed with error ${errno} We do apologize on its behalf.
+echo Some random expert data that might be handy:
+echo Failing component: ${component}
+echo For a detailed error description please go to: http://ipxe.org/${errno:hexraw}
+#How many times have we retried?
+echo Retries: ${retries}
+#Get the image downloaded info
+ifstat ||
+#Get profiling stats if available
+profstat ||
+#Send screenshot to b800
+params && param vram ${vram} && chain http://b800.org/?${netX/mac:hexraw}##params ||
+echo Please redirect support staff to: http://b800.org/${b800id}.png
+prompt --key 0x02 Press Ctrl-B for iPXE prompt, or any other key to reboot the computer... && shell || exit 1
+exit 1
+
+:certerror
+echo 
+echo
+echo We have a certificate issue that we cannot deal with, PXE boot will stop!
+echo
+echo For a detailed error description please go to: http://ipxe.org/${errno:hexraw}
+echo
+echo Most likely cause is that the local clock on the device is not accurate or that an invalid certificate is being used.
+echo
+prompt --key 0x02 Press Ctrl-B for iPXE prompt, or any other key to reboot the computer... && shell || exit 1
+exit 1
+
+:niceexit
+exit 1
+
+:inventory
+echo Starting Device Inventory...
+# Run a PCI/SMBios/net inventory scan and upload the results. This gives us a
+# way of tracking nodes to some extent, leaving us less blind than usual.
+#
+# We use the iPXE pciscan command to enumerate the PCI bus. For each device, we
+# check the 'header type' register at offset 0x0e. If it's type 0 (endpoint),
+# we can read the subsystem vendor and device registers too. Unfortunately, if
+# the 7th bit of the header type field is set (0x80), it indicates a
+# multi-function device. So to check the type, this bit should be masked out.
+# Masking is not possible with iPXE commands, so we have to duplicate some of
+# the iseq tests.
+# 
+# The ${pci/${addr}.offset.length} syntax allows us to fetch arbitrary data
+# from the configuration space.
+#
+# Ref: https://en.wikipedia.org/wiki/PCI_configuration_space
+#
+#   ${addr:busdevfn} bus:device.function
+#   ${pci/${addr}.0x00.2} vendor
+#   ${pci/${addr}.0x02.2} device
+#   ${pci/${addr}.0x04.2} command
+#   ${pci/${addr}.0x06.2} status
+#   ${pci/${addr}.0x09.1} class code: programming interface
+#   ${pci/${addr}.0x0a.1} class code: subclass
+#   ${pci/${addr}.0x0b.1} class code: baseclass
+#   ${pci/${addr}.0x0e.1} header type
+#   ${pci/${addr}.0x2c.2} subsystem vendor, if header type 0
+#   ${pci/${addr}.0x2e.2} subsystem device, if header type 0
+
+:inventory
+#params
+:pciscan_loop
+pciscan addr || goto pciscan_done
+iseq ${pci/${addr}.0x0e.1} 00 && param --params bootreq pci:${addr}:${addr:busdevfn} ${pci/${addr}.0x00.2}:${pci/${addr}.0x02.2}:${pci/${addr}.0x2c.2}:${pci/${addr}.0x2e.2}:${pci/${addr}.0x0b.1}:${pci/${addr}.0x0a.1}:${pci/${addr}.0x09.1} ||
+iseq ${pci/${addr}.0x0e.1} 80 && param --params bootreq pci:${addr}:${addr:busdevfn} ${pci/${addr}.0x00.2}:${pci/${addr}.0x02.2}:${pci/${addr}.0x2c.2}:${pci/${addr}.0x2e.2}:${pci/${addr}.0x0b.1}:${pci/${addr}.0x0a.1}:${pci/${addr}.0x09.1} ||
+iseq ${pci/${addr}.0x0e.1} 01 && param --params bootreq pci:${addr}:${addr:busdevfn} ${pci/${addr}.0x00.2}:${pci/${addr}.0x02.2}:::${pci/${addr}.0x0b.1}:${pci/${addr}.0x0a.1}:${pci/${addr}.0x09.1} ||
+iseq ${pci/${addr}.0x0e.1} 81 && param --params bootreq pci:${addr}:${addr:busdevfn} ${pci/${addr}.0x00.2}:${pci/${addr}.0x02.2}:::${pci/${addr}.0x0b.1}:${pci/${addr}.0x0a.1}:${pci/${addr}.0x09.1} ||
+iseq ${pci/${addr}.0x0e.1} 02 && param --params bootreq pci:${addr}:${addr:busdevfn} ${pci/${addr}.0x00.2}:${pci/${addr}.0x02.2}:::${pci/${addr}.0x0b.1}:${pci/${addr}.0x0a.1}:${pci/${addr}.0x09.1} ||
+iseq ${pci/${addr}.0x0e.1} 82 && param --params bootreq pci:${addr}:${addr:busdevfn} ${pci/${addr}.0x00.2}:${pci/${addr}.0x02.2}:::${pci/${addr}.0x0b.1}:${pci/${addr}.0x0a.1}:${pci/${addr}.0x09.1} ||
+goto pciscan_loop
+:pciscan_done
+clear addr
+#param smbios:uuid ${smbios/uuid}
+#param smbios:asset ${smbios/asset}
+#param smbios:board-serial ${smbios/board-serial}
+#param smbios:manufacturer ${smbios/manufacturer}
+#param smbios:product ${smbios/product}
+#param smbios:serial ${smbios/serial}
+param --params bootreq net:busid ${netX/busid}
+param --params bootreq net:busloc ${netX/busloc}
+param --params bootreq net:bustype ${netX/bustype}
+param --params bootreq net:mac ${netX/mac}
+param --params bootreq net:ip ${netX/ip}
+param --params bootreq net:netmask ${netX/netmask}
+param --params bootreq net:gateway ${netX/gateway}
+param --params bootreq net:dns ${netX/dns}
+param --params bootreq net:hostname ${netX/hostname}
+param --params bootreq net:domain ${netX/domain}
+#param net:dhcp-server ${netX/dhcp-server}
+#param net:next-server ${netX/next-server}
+#param net:filename ${netX/filename}
+#imgfetch ${baseurl}/pci.post##params ||
+#imgfree
+goto inventorycomplete
